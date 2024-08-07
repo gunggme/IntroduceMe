@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import Message from './Message';
 
@@ -47,20 +47,45 @@ const SendButton = styled.button`
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const websocket = useRef(null);
+
+  useEffect(() => {
+    const createThread = async () => {
+      const response = await fetch('http://localhost:8000/create_thread', { method: 'POST' });
+      const data = await response.json();
+      const threadId = data.thread_id;
+
+      websocket.current = new WebSocket(`ws://localhost:8000/ws/${threadId}`);
+      websocket.current.onmessage = (event) => {
+        const botMessage = { text: event.data, type: 'bot' };
+        setMessages((prevMessages) => [...prevMessages, botMessage]);
+      };
+
+      websocket.current.onclose = () => {
+        console.log('WebSocket disconnected');
+      };
+    };
+
+    createThread();
+
+    return () => {
+      if (websocket.current) {
+        websocket.current.close();
+      }
+    };
+  }, []);
 
   const handleSend = () => {
     if (!input.trim()) return;
 
-    // 사용자 메시지 추가
     const userMessage = { text: input, type: 'user' };
-    //setMessages([...messages, userMessage]);
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
 
-    // 입력 필드 초기화
+    if (websocket.current) {
+      websocket.current.send(input);
+    }
+
     setInput('');
-
-    // 챗봇 응답 시뮬레이션
-    const botMessage = { text: "This is a simulated response.", type: 'bot' };
-    setMessages(prevMessages => [...prevMessages, userMessage, botMessage]);
   };
 
   return (
