@@ -67,12 +67,6 @@ const Chatbot = () => {
     };
 
     createThread();
-
-    return () => {
-      if (websocket.current) {
-        websocket.current.close();
-      }
-    };
   }, []);
 
   const handleSend = () => {
