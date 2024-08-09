@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import Message from './Message';
+import ReactMarkdown from 'react-markdown';
 
 const ChatContainer = styled.div`
   display: flex;
@@ -47,18 +48,23 @@ const SendButton = styled.button`
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [currentBotMessage, setCurrentBotMessage] = useState('');
+  const [isReceiving, setIsReceiving] = useState(false);
   const websocket = useRef(null);
+  const webSocketURL = "ws://localhost:8000/ws/";
 
   useEffect(() => {
     const createThread = async () => {
+      console.log("실행시작");
       const response = await fetch('http://localhost:8000/create_thread', { method: 'POST' });
       const data = await response.json();
-      const threadId = data.thread_id;
+      const tempThreadId = JSON.stringify(data.thread_id.id).replace('\"', '').replace('\"', '');
+      websocket.current = new WebSocket(webSocketURL + tempThreadId);
 
-      websocket.current = new WebSocket(`ws://localhost:8000/ws/${threadId}`);
       websocket.current.onmessage = (event) => {
-        const botMessage = { text: event.data, type: 'bot' };
-        setMessages((prevMessages) => [...prevMessages, botMessage]);
+        const newMessagePart = event.data;
+        setIsReceiving(true);
+        setCurrentBotMessage((prev) => prev + newMessagePart);
       };
 
       websocket.current.onclose = () => {
@@ -69,8 +75,27 @@ const Chatbot = () => {
     createThread();
   }, []);
 
+  useEffect(() => {
+    if (isReceiving) {
+      setMessages((prevMessages) => {
+        const updatedMessages = [...prevMessages];
+        if (updatedMessages.length > 0 && updatedMessages[updatedMessages.length - 1].type === 'bot') {
+          updatedMessages[updatedMessages.length - 1].text = currentBotMessage;
+        } else {
+          updatedMessages.push({ text: currentBotMessage, type: 'bot' });
+        }
+        return updatedMessages;
+      });
+    }
+  }, [currentBotMessage]);
+
   const handleSend = () => {
     if (!input.trim()) return;
+
+    if (isReceiving) {
+      setIsReceiving(false);
+      setCurrentBotMessage('');
+    }
 
     const userMessage = { text: input, type: 'user' };
     setMessages((prevMessages) => [...prevMessages, userMessage]);
@@ -87,7 +112,11 @@ const Chatbot = () => {
       <MessagesArea>
         {messages.map((msg, index) => (
           <Message key={index} type={msg.type}>
-            {msg.text}
+            {msg.type === 'bot' ? (
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
+            ) : (
+              msg.text
+            )}
           </Message>
         ))}
       </MessagesArea>
